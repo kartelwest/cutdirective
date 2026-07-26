@@ -69,9 +69,12 @@
 - [x] Local delivery endpoint (`/projects/{id}/deliver`) copying final exports to `DELIVERY_ROOT`
 - [x] UI for QA summary, packaging, delivery, and notification inbox
 
-## Gate 7+ — Next
-- [ ] Operator runbook and docs
-- [ ] Backup/restore procedures
-- [ ] Real-project pilot and feedback loop
-- [ ] Cloud LLM adapter for the AI Director
-- [ ] Source audio mixing/ducking and watermarked previews
+## Gate 7 — Internal release
+- [x] Operator runbook (`docs/OPERATORS.md`)
+- [x] Backup/restore scripts (`scripts/backup.sh`, `scripts/restore.sh`)
+- [x] Integration test script (`scripts/integration-test.sh`)
+- [x] Real-project pilot with a generated speech+scene clip
+- [x] End-to-end verification: analyze → plan → render → QA → package → deliver → notify
+- [ ] Cloud LLM adapter for the AI Director (planned)
+- [ ] Source audio mixing/ducking and watermarked previews (planned)
+- [ ] Background worker render queue with real-time progress and retry/restart (planned)

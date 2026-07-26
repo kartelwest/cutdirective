@@ -111,12 +111,12 @@ def render_concat(
         raise RuntimeError(f"FFmpeg failed: {result.stderr}")
 
 
-def _run_ffmpeg_filter(path: Path, filter_graph: str) -> str:
+def _run_ffmpeg_filter(path: Path, filter_graph: str, stream: str = "v") -> str:
     cmd = [
         FFMPEG_PATH,
         "-y",
         "-i", str(path),
-        "-filter", filter_graph,
+        f"-{stream}f", filter_graph,
         "-f", "null",
         "-",
     ]
@@ -127,7 +127,7 @@ def _run_ffmpeg_filter(path: Path, filter_graph: str) -> str:
 def detect_scenes(path: Path, threshold: float = 0.3) -> List[float]:
     """Return timestamps of scene changes using the scene detection filter."""
     stderr = _run_ffmpeg_filter(
-        path, f"select=gt(scene\\,{threshold}),showinfo"
+        path, f"select=gt(scene\\,{threshold}),showinfo", stream="v"
     )
     timestamps = []
     for line in stderr.splitlines():
@@ -143,7 +143,7 @@ def detect_scenes(path: Path, threshold: float = 0.3) -> List[float]:
 
 def detect_silence(path: Path, noise_db: int = -50, min_duration: float = 0.5) -> List[Dict[str, float]]:
     stderr = _run_ffmpeg_filter(
-        path, f"silencedetect=noise={noise_db}dB:d={min_duration}"
+        path, f"silencedetect=noise={noise_db}dB:d={min_duration}", stream="a"
     )
     segments = []
     start: Optional[float] = None
@@ -165,7 +165,7 @@ def detect_silence(path: Path, noise_db: int = -50, min_duration: float = 0.5) -
 
 def detect_black_frames(path: Path, min_duration: float = 0.1) -> List[Dict[str, float]]:
     stderr = _run_ffmpeg_filter(
-        path, f"blackdetect=d={min_duration}:pix_th=0.00"
+        path, f"blackdetect=d={min_duration}:pix_th=0.00", stream="v"
     )
     segments = []
     start: Optional[float] = None
@@ -188,7 +188,7 @@ def detect_black_frames(path: Path, min_duration: float = 0.1) -> List[Dict[str,
 def detect_freeze_frames(path: Path, min_duration: float = 2.0, noise_db: int = -60) -> List[Dict[str, float]]:
     try:
         stderr = _run_ffmpeg_filter(
-            path, f"freezedetect=n={noise_db}dB:d={min_duration}"
+            path, f"freezedetect=n={noise_db}dB:d={min_duration}", stream="v"
         )
     except Exception:
         return []
@@ -211,7 +211,7 @@ def detect_freeze_frames(path: Path, min_duration: float = 2.0, noise_db: int = 
 
 
 def volume_detect(path: Path) -> Dict[str, Any]:
-    stderr = _run_ffmpeg_filter(path, "volumedetect")
+    stderr = _run_ffmpeg_filter(path, "volumedetect", stream="a")
     result: Dict[str, Any] = {}
     for line in stderr.splitlines():
         if "mean_volume:" in line:

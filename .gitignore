@@ -42,3 +42,5 @@ out/
 
 # Generated test outputs
 sample-data/outputs/
+sample-data/pilot_*
+sample-data/*.wav
