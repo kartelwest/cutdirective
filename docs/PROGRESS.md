@@ -44,10 +44,23 @@
 - [ ] Cloud LLM adapter and prompt hierarchy (planned)
 - [ ] Full plan validation/repair loop (planned)
 
-## Gate 5+ — Next
-- [ ] Preview/final render split
-- [ ] Captions, thumbnails, and audio mixing
-- [ ] Multiple outputs from one project
-- [ ] Durable job queue with retry/cancel
-- [ ] SMTP and in-app notifications
+## Gate 5 — Production workflow
+- [x] Preview render to `05_Previews` with half-resolution and lower bitrate
+- [x] Final render to `06_Final-Exports`
+- [x] Multiple outputs from a single plan (e.g., main + alternate 16:9)
+- [x] Silent AAC audio track added to every output
+- [x] Thumbnail generation to `08_Thumbnails`
+- [x] SRT sidecar generation to `07_Captions`
+- [x] Versioned output file naming
+- [x] Basic `POST /jobs/{id}/cancel` endpoint
+- [x] UI buttons for preview vs final and output review
+- [ ] Source audio mixing and ducking (planned)
+- [ ] Watermarked preview burn-in (planned)
+- [ ] Background worker render queue with real-time progress (planned)
+- [ ] Retry/restart from a failed stage (planned)
+
+## Gate 6+ — Next
 - [ ] Automated QA suite
+- [ ] SMTP/in-app notifications
+- [ ] Project packaging and delivery
+- [ ] Operator docs and real-project pilot
