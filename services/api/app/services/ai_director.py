@@ -90,7 +90,10 @@ class BaseAIDirector(ABC):
 
     def __init__(self, project: Project, assets: List[Asset], analyses: List[AnalysisResult]):
         self.project = project
-        self.assets = sorted(assets, key=lambda a: a.filename)
+        self.assets = sorted(
+            [a for a in assets if a.asset_type == "video"],
+            key=lambda a: a.filename,
+        )
         self.analyses = {a.asset_id: a for a in analyses}
 
     @abstractmethod

@@ -5,7 +5,7 @@ This document tracks intentional v1 boundaries and gaps that are out of scope fo
 ## Out of scope for v1
 
 - **Cloud AI provider integration** — an OpenAI-compatible adapter is implemented (`OpenAIDirector`) and can be enabled with `AI_PROVIDER=openai` plus an API key. Advanced prompt hierarchy, multi-provider switching, and plan repair loops are not yet implemented.
-- **True source audio ducking/music mixing** — the renderer now mixes source audio segments into the output. It does not yet auto-duck background music under dialogue or mix external music tracks.
+- **True source audio ducking/music mixing** — the renderer can mix a background music asset (`music_asset_id`) and auto-duck it against the source dialogue using FFmpeg sidechain compression. It does not yet support external music libraries or per-segment manual ducking curves.
 - **Real-time job progress events** — jobs are polled via `/jobs/{id}`. A streaming or WebSocket event feed is not implemented.
 - **Durable worker queue** — implemented: render jobs are queued in the API and processed by a dedicated worker container that polls the database. The queue is not yet backed by Celery/RQ/RabbitMQ; it uses the SQLite database as the queue store.
 - **Advanced transitions and motion graphics** — only hard cuts and basic padding are supported. Transitions, lower-thirds, and animated graphics are future work.

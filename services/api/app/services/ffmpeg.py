@@ -64,6 +64,8 @@ def render_concat(
     height: int = 1920,
     crf: int = 23,
     video_bitrate: Optional[str] = None,
+    music_path: Optional[Path] = None,
+    music_ducking_db: float = -12.0,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -105,9 +107,35 @@ def render_concat(
     video_filters.append(f"{v_concats}concat=n={len(selections)}:v=1:a=0[outv]")
 
     amix_inputs = "".join(delayed_labels)
+    dialogue_label = "[outa]"
     audio_filters.append(
         f"{amix_inputs}amix=inputs={len(selections)}:duration=longest:normalize=0,"
-        f"aformat=sample_fmts=fltp:channel_layouts=stereo:sample_rates=48000,"
+        f"aformat=sample_fmts=fltp:channel_layouts=stereo:sample_rates=48000[dialogue]"
+    )
+
+    if music_path and music_path.exists():
+        music_idx = len(selections)
+        inputs.extend(["-stream_loop", "-1", "-t", str(total_duration), "-i", str(music_path)])
+        # Duck the music against the dialogue using sidechain compression.
+        # Reduce gain when dialogue is present so the track sits under the voice.
+        ratio = max(1.0, min(20.0, 10 ** (abs(music_ducking_db) / 10.0)))
+        audio_filters.append(
+            f"[{music_idx}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo:sample_rates=48000"
+            f",atrim=0:{total_duration}[music]"
+        )
+        audio_filters.append(
+            f"[music][dialogue]sidechaincompress=threshold=-35dB:ratio={ratio:.2f}"
+            f":attack=50:release=300:level_sc=1.0[kicked]"
+        )
+        audio_filters.append(
+            f"[dialogue][kicked]amix=inputs=2:duration=first:dropout_transition=0[rawmix]"
+        )
+        final_label = "[rawmix]"
+    else:
+        final_label = "[dialogue]"
+
+    audio_filters.append(
+        f"{final_label}aformat=sample_fmts=fltp:channel_layouts=stereo:sample_rates=48000,"
         f"loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,"
         f"aformat=sample_fmts=fltp:channel_layouts=stereo:sample_rates=48000[outa]"
     )

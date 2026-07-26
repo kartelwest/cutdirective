@@ -102,7 +102,24 @@ def run_render_job(db: Session, job: Job) -> None:
             _output_name = f"{base_name}_{export_name}_v{version:02d}.mp4"
             output_path = out_dir / _output_name
 
-            render_concat(mapped, output_path, width=width, height=height, crf=crf, video_bitrate=bitrate)
+            audio_config = plan.get("audio", {})
+            music_asset_id = audio_config.get("music_asset_id")
+            music_path = None
+            if music_asset_id:
+                music_asset = assets_by_id.get(music_asset_id)
+                if music_asset and Path(music_asset.workspace_path).exists():
+                    music_path = Path(music_asset.workspace_path)
+
+            render_concat(
+                mapped,
+                output_path,
+                width=width,
+                height=height,
+                crf=crf,
+                video_bitrate=bitrate,
+                music_path=music_path,
+                music_ducking_db=float(audio_config.get("music_ducking_db", -12)),
+            )
 
             qa = probe(output_path)
             if not qa.get("readable"):
