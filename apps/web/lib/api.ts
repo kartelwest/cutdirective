@@ -26,6 +26,18 @@ export interface Asset {
   created_at: string;
 }
 
+export interface AnalysisResult {
+  id: string;
+  asset_id: string;
+  project_id: string;
+  status: string;
+  transcript: Record<string, unknown>;
+  scenes: unknown[];
+  audio_events: Record<string, unknown>;
+  quality: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface Job {
   id: string;
   project_id: string;

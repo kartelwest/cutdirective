@@ -59,6 +59,20 @@ class Job(Base):
     updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 
 
+class AnalysisResult(Base):
+    __tablename__ = "analysis_results"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    asset_id = Column(String, ForeignKey("assets.id"), nullable=False)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    status = Column(String, default="PENDING")
+    transcript = Column(JSON, default=dict)
+    scenes = Column(JSON, default=list)
+    audio_events = Column(JSON, default=dict)
+    quality = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=now_utc)
+
+
 class Preset(Base):
     __tablename__ = "presets"
 

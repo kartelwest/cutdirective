@@ -2,24 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { API_URL, Asset, Job, Project } from "@/lib/api";
+import { AnalysisResult, API_URL, Asset, Job, Project } from "@/lib/api";
+
+interface EditPlan {
+  plan_version: string;
+  project_id: string;
+  intent: Record<string, unknown>;
+  assumptions: string[];
+  timeline: Array<Record<string, unknown>>;
+  audio: Record<string, unknown>;
+  graphics: Record<string, unknown>;
+  exports: Array<Record<string, unknown>>;
+  expected_qa: string[];
+  confidence: number;
+  review_flags: string[];
+}
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [analysis, setAnalysis] = useState<AnalysisResult[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
-  const [rendering, setRendering] = useState(false);
+  const [plan, setPlan] = useState<EditPlan | null>(null);
+  const [loading, setLoading] = useState<string | null>(null);
 
   async function refresh() {
-    const [p, a] = await Promise.all([
+    const [p, a, an] = await Promise.all([
       fetch(`${API_URL}/projects/${id}`).then((r) => r.json()),
       fetch(`${API_URL}/projects/${id}/assets`).then((r) => r.json()),
+      fetch(`${API_URL}/projects/${id}/analysis`).then((r) => r.json()).catch(() => []),
     ]);
     setProject(p);
     setAssets(a);
+    setAnalysis(an);
   }
 
   useEffect(() => {
@@ -41,33 +59,38 @@ export default function ProjectPage() {
     await refresh();
   }
 
-  async function render() {
-    if (assets.length === 0) return;
-    setRendering(true);
-    const plan = {
-      plan_version: "1.0",
-      project_id: id,
-      intent: {
-        platform: project?.preset || "instagram_reel",
-        target_seconds: 5,
-        ratio: "9:16",
-        goal: "Vertical slice test",
-      },
-      timeline: assets.slice(0, 2).map((a) => ({
-        asset_id: a.id,
-        source_in: 0,
-        source_out: 2,
-      })),
-      exports: [{ name: "main", resolution: "1080x1920", container: "mp4", video_codec: "h264" }],
-    };
+  async function analyze() {
+    setLoading("analyzing");
+    const res = await fetch(`${API_URL}/projects/${id}/analyze`, { method: "POST" });
+    const j = await res.json();
+    setJob(j);
+    setLoading(null);
+    await refresh();
+  }
+
+  async function generatePlan() {
+    setLoading("planning");
+    const res = await fetch(`${API_URL}/projects/${id}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_seconds: 4 }),
+    });
+    const p = await res.json();
+    setPlan(p);
+    setLoading(null);
+  }
+
+  async function renderPlan() {
+    if (!plan) return;
+    setLoading("rendering");
     const res = await fetch(`${API_URL}/projects/${id}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan, output_name: "vertical_slice_v01.mp4" }),
+      body: JSON.stringify({ plan, output_name: "ai_render_v01.mp4" }),
     });
     const j = await res.json();
     setJob(j);
-    setRendering(false);
+    setLoading(null);
   }
 
   if (!project) return <p className="p-8">Loading…</p>;
@@ -109,28 +132,63 @@ export default function ProjectPage() {
         </form>
       </section>
 
+      {analysis.length > 0 && (
+        <section className="mt-6 rounded-xl border border-zinc-200 p-6">
+          <h2 className="mb-4 font-semibold">Analysis</h2>
+          <ul className="space-y-2">
+            {analysis.map((r) => (
+              <li key={r.id} className="rounded-lg bg-zinc-50 px-3 py-2 text-sm">
+                {String(r.quality?.resolution || "")} · scenes: {r.scenes?.length || 0} · transcript words: {" "}
+                {Array.isArray(r.transcript?.words) ? r.transcript.words.length : 0} · {r.status}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="mt-6 rounded-xl border border-zinc-200 p-6">
-        <h2 className="mb-4 font-semibold">Render</h2>
-        <button
-          onClick={render}
-          disabled={assets.length === 0 || rendering}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-        >
-          {rendering ? "Rendering…" : "Render vertical slice"}
-        </button>
+        <h2 className="mb-4 font-semibold">AI Director</h2>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={analyze}
+            disabled={assets.length === 0 || loading === "analyzing"}
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {loading === "analyzing" ? "Analyzing…" : "Analyze assets"}
+          </button>
+          <button
+            onClick={generatePlan}
+            disabled={assets.length === 0 || loading === "planning"}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+          >
+            {loading === "planning" ? "Planning…" : "Generate plan"}
+          </button>
+          <button
+            onClick={renderPlan}
+            disabled={!plan || loading === "rendering"}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {loading === "rendering" ? "Rendering…" : "Render plan"}
+          </button>
+        </div>
+
+        {plan && (
+          <div className="mt-4 rounded-lg bg-zinc-50 p-4 text-sm">
+            <p><span className="font-medium">Confidence:</span> {plan.confidence}</p>
+            <p><span className="font-medium">Review flags:</span> {plan.review_flags.join(", ") || "none"}</p>
+            <p><span className="font-medium">Timeline:</span> {plan.timeline.length} segments</p>
+            <pre className="mt-2 max-h-48 overflow-auto rounded bg-zinc-100 p-2 text-xs">
+              {JSON.stringify(plan, null, 2)}
+            </pre>
+          </div>
+        )}
 
         {job && (
           <div className="mt-4 rounded-lg bg-zinc-50 p-4 text-sm">
-            <p>
-              <span className="font-medium">Status:</span> {job.status}
-            </p>
-            <p>
-              <span className="font-medium">Stage:</span> {job.stage}
-            </p>
+            <p><span className="font-medium">Status:</span> {job.status}</p>
+            <p><span className="font-medium">Stage:</span> {job.stage}</p>
             {job.outputs.map((o, i) => (
-              <p key={i} className="mt-1 break-all text-zinc-600">
-                {JSON.stringify(o)}
-              </p>
+              <p key={i} className="mt-1 break-all text-zinc-600">{JSON.stringify(o)}</p>
             ))}
           </div>
         )}

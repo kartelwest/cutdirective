@@ -1,7 +1,7 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.config import FFMPEG_PATH, FFPROBE_PATH
 
@@ -98,3 +98,123 @@ def render_concat(
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"FFmpeg failed: {result.stderr}")
+
+
+def _run_ffmpeg_filter(path: Path, filter_graph: str) -> str:
+    cmd = [
+        FFMPEG_PATH,
+        "-y",
+        "-i", str(path),
+        "-filter", filter_graph,
+        "-f", "null",
+        "-",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return result.stderr
+
+
+def detect_scenes(path: Path, threshold: float = 0.3) -> List[float]:
+    """Return timestamps of scene changes using the scene detection filter."""
+    stderr = _run_ffmpeg_filter(
+        path, f"select=gt(scene\\,{threshold}),showinfo"
+    )
+    timestamps = []
+    for line in stderr.splitlines():
+        if "pts_time:" in line:
+            parts = line.split("pts_time:")
+            if len(parts) > 1:
+                try:
+                    timestamps.append(float(parts[1].split()[0]))
+                except ValueError:
+                    pass
+    return timestamps
+
+
+def detect_silence(path: Path, noise_db: int = -50, min_duration: float = 0.5) -> List[Dict[str, float]]:
+    stderr = _run_ffmpeg_filter(
+        path, f"silencedetect=noise={noise_db}dB:d={min_duration}"
+    )
+    segments = []
+    start: Optional[float] = None
+    for line in stderr.splitlines():
+        if "silence_start:" in line:
+            try:
+                start = float(line.split("silence_start:")[1].split()[0])
+            except (IndexError, ValueError):
+                start = None
+        elif "silence_end:" in line and start is not None:
+            try:
+                end = float(line.split("silence_end:")[1].split()[0])
+                segments.append({"start": start, "end": end})
+                start = None
+            except (IndexError, ValueError):
+                pass
+    return segments
+
+
+def detect_black_frames(path: Path, min_duration: float = 0.1) -> List[Dict[str, float]]:
+    stderr = _run_ffmpeg_filter(
+        path, f"blackdetect=d={min_duration}:pix_th=0.00"
+    )
+    segments = []
+    start: Optional[float] = None
+    for line in stderr.splitlines():
+        if "black_start:" in line:
+            try:
+                start = float(line.split("black_start:")[1].split()[0])
+            except (IndexError, ValueError):
+                start = None
+        elif "black_end:" in line and start is not None:
+            try:
+                end = float(line.split("black_end:")[1].split()[0])
+                segments.append({"start": start, "end": end})
+                start = None
+            except (IndexError, ValueError):
+                pass
+    return segments
+
+
+def detect_freeze_frames(path: Path, min_duration: float = 2.0, noise_db: int = -60) -> List[Dict[str, float]]:
+    try:
+        stderr = _run_ffmpeg_filter(
+            path, f"freezedetect=n={noise_db}dB:d={min_duration}"
+        )
+    except Exception:
+        return []
+    segments = []
+    start: Optional[float] = None
+    for line in stderr.splitlines():
+        if "freeze_start:" in line:
+            try:
+                start = float(line.split("freeze_start:")[1].split()[0])
+            except (IndexError, ValueError):
+                start = None
+        elif "freeze_end:" in line and start is not None:
+            try:
+                end = float(line.split("freeze_end:")[1].split()[0])
+                segments.append({"start": start, "end": end})
+                start = None
+            except (IndexError, ValueError):
+                pass
+    return segments
+
+
+def volume_detect(path: Path) -> Dict[str, Any]:
+    stderr = _run_ffmpeg_filter(path, "volumedetect")
+    result: Dict[str, Any] = {}
+    for line in stderr.splitlines():
+        if "mean_volume:" in line:
+            try:
+                result["mean_volume_db"] = float(line.split("mean_volume:")[1].split()[0])
+            except (IndexError, ValueError):
+                pass
+        elif "max_volume:" in line:
+            try:
+                result["max_volume_db"] = float(line.split("max_volume:")[1].split()[0])
+            except (IndexError, ValueError):
+                pass
+    return result
+
+
+def has_audio_stream(probe_data: Dict[str, Any]) -> bool:
+    return any(s.get("codec_type") == "audio" for s in probe_data.get("streams", []))

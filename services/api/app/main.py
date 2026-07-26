@@ -10,17 +10,22 @@ from sqlalchemy.orm import Session
 
 from app import config, schemas
 from app.database import SessionLocal, engine, Base
-from app.models import Asset, Job, Preset, Project, Setting
+from app.models import AnalysisResult, Asset, Job, Preset, Project, Setting
 from app.schemas import (
+    AnalysisResultOut,
     AssetOut,
+    EditPlanOut,
     HealthOut,
     JobOut,
+    PlanRequest,
     ProjectCreate,
     ProjectOut,
     ProjectUpdate,
     RenderRequest,
     WorkerHeartbeatOut,
 )
+from app.services.ai_director import LocalAIDirector
+from app.services.analysis import analyze_asset
 from app.services.assets import ingest_asset
 from app.services.ffmpeg import probe, render_concat
 from app.services.workspace import allowed_path, create_project_workspace
@@ -165,6 +170,26 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
     return job
 
 
+@app.get("/projects/{project_id}/analysis", response_model=list[AnalysisResultOut])
+def list_analysis(project_id: str, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return db.query(AnalysisResult).filter(AnalysisResult.project_id == project_id).all()
+
+
+@app.post("/projects/{project_id}/plan", response_model=EditPlanOut)
+def generate_plan(project_id: str, request: PlanRequest = PlanRequest(), db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    assets = db.query(Asset).filter(Asset.project_id == project_id).all()
+    analyses = db.query(AnalysisResult).filter(AnalysisResult.project_id == project_id).all()
+    director = LocalAIDirector(project, assets, analyses)
+    plan = director.generate_plan(request.model_dump(exclude_unset=True))
+    return plan
+
+
 @app.post("/projects/{project_id}/render", response_model=JobOut)
 def render_project(
     project_id: str,
@@ -242,7 +267,7 @@ def render_project(
     return job
 
 
-@app.post("/projects/{project_id}/analyze")
+@app.post("/projects/{project_id}/analyze", response_model=JobOut)
 def analyze_project(project_id: str, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -256,10 +281,7 @@ def analyze_project(project_id: str, db: Session = Depends(get_db)):
     try:
         assets = db.query(Asset).filter(Asset.project_id == project_id).all()
         for asset in assets:
-            if asset.status != "READY":
-                data = probe(Path(asset.workspace_path))
-                asset.status = "READY" if data.get("readable") else "CORRUPT"
-                asset.metadata_json = data
+            analyze_asset(db, asset)
         project.status = "ANALYZED"
         job.status = "COMPLETED"
         job.stage = "ANALYZED"

@@ -27,10 +27,27 @@
 - [x] Basic QA probe after render
 - [ ] Full operation registry and unit tests (planned)
 
-## Gate 3+ — Next
-- Media intelligence (transcript, scene detection, quality analysis)
-- AI Director with structured plan schema
-- Preview/final render split
-- Captions, thumbnails, and notifications
-- Automated QA suite
-- Real-project pilot
+## Gate 3 — Media intelligence
+- [x] ffprobe metadata and corruption check
+- [x] Scene/shot change detection with FFmpeg scene filter
+- [x] Silence, black frame, freeze frame, and volume detection
+- [x] Local transcription adapter (Vosk) with word-level timestamps
+- [x] `AnalysisResult` persistence and `/projects/{id}/analysis` endpoint
+- [ ] Advanced visual quality scoring (blur, shake, exposure) (planned)
+
+## Gate 4 — AI Director
+- [x] Pluggable local rule-based AI Director (`LocalAIDirector`)
+- [x] Reads brief, preset, asset metadata, and analysis results
+- [x] Generates structured edit plan with intent, assumptions, timeline, audio, graphics, exports, QA, confidence, review flags
+- [x] `POST /projects/{id}/plan` endpoint
+- [x] UI to analyze, generate plan, and render from plan
+- [ ] Cloud LLM adapter and prompt hierarchy (planned)
+- [ ] Full plan validation/repair loop (planned)
+
+## Gate 5+ — Next
+- [ ] Preview/final render split
+- [ ] Captions, thumbnails, and audio mixing
+- [ ] Multiple outputs from one project
+- [ ] Durable job queue with retry/cancel
+- [ ] SMTP and in-app notifications
+- [ ] Automated QA suite

@@ -66,6 +66,39 @@ class JobOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AnalysisResultOut(BaseModel):
+    id: str
+    asset_id: str
+    project_id: str
+    status: str
+    transcript: Dict[str, Any]
+    scenes: List[Any]
+    audio_events: Dict[str, Any]
+    quality: Dict[str, Any]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PlanRequest(BaseModel):
+    target_seconds: Optional[float] = None
+    output_resolution: Optional[str] = None
+
+
+class EditPlanOut(BaseModel):
+    plan_version: str
+    project_id: str
+    intent: Dict[str, Any]
+    assumptions: List[str]
+    timeline: List[Dict[str, Any]]
+    audio: Dict[str, Any]
+    graphics: Dict[str, Any]
+    exports: List[Dict[str, Any]]
+    expected_qa: List[str]
+    confidence: float
+    review_flags: List[str]
+
+
 class HealthOut(BaseModel):
     status: str
     ffmpeg: bool

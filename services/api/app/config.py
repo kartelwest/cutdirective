@@ -23,3 +23,11 @@ API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+
+VOSK_MODEL_DIR = Path(os.getenv("VOSK_MODEL_DIR", str(DATA_DIR / "vosk-models"))).expanduser().resolve()
+VOSK_MODEL_DIR.mkdir(parents=True, exist_ok=True)
+VOSK_MODEL_NAME = os.getenv("VOSK_MODEL_NAME", "vosk-model-small-en-us-0.15")
+VOSK_MODEL_URL = os.getenv(
+    "VOSK_MODEL_URL",
+    "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
+)
