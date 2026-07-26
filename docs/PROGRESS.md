@@ -2,24 +2,35 @@
 
 ## Gate 0 — Repository and decision lock
 - [x] Repository structure created
-- [ ] Decision lock documented below
-- [x] README and .gitignore
-- [ ] Docker Compose foundation
-- [ ] Health endpoints
-- [ ] Development scripts
+- [x] Decision lock documented in `docs/DECISIONS.md`
+- [x] README, `.env.example`, `.gitignore`, `.dockerignore`
+- [x] Docker Compose foundation (api, web, worker)
+- [x] Health endpoints (`/health`, `/worker/health`)
+- [x] Development scripts and run commands documented
+- [x] Working-name disclaimer in `docs/DECISIONS.md`
 
-## Decision lock
-- Product: CutDirective AI (working name, not trademark-cleared)
-- Model: local web application with Docker Compose
-- Database: SQLite (single-user internal MVP)
-- Notification: SMTP (WhatsApp/Telegram adapter later)
-- First presets: Instagram Reel 9:16, Horizontal Social 16:9
-- Approval mode: plan approval + low-resolution preview
-- Output root: user-selectable `CutDirective/Projects` folder
-- AI: provider-pluggable structured-output model with local analysis fallback
+## Gate 1 — Local foundation
+- [x] Project creation (`POST /projects`)
+- [x] Workspace creation with numbered folders
+- [x] Asset intake with copy, fingerprint (SHA-256), and ffprobe metadata
+- [x] SQLite persistence with SQLAlchemy
+- [x] Worker heartbeat (polling `/health`)
+- [x] Job persistence (`Job` model and `/jobs/{id}`)
+- [x] Disk-space health check
+- [ ] Durable retry / cancel / restart (planned)
 
-## Current state
-Repository initialized. Environment has Node 20, Python 3.10, FFmpeg 4.4.2, Docker 27.4.1, and `uv` 0.7.9. No remote repository yet; the GitHub integration could not create it, so the codebase is local-only until a remote is added.
+## Gate 2 — Deterministic rendering without AI
+- [x] Hand-authored edit plan accepted via `POST /projects/{id}/render`
+- [x] Plan validation against real asset IDs and workspace paths
+- [x] FFmpeg concat with scaling/padding to target resolution
+- [x] Real rendered MP4 (`docker_vertical_v01.mp4`, 1080x1920)
+- [x] Basic QA probe after render
+- [ ] Full operation registry and unit tests (planned)
 
-## Next step
-Build Gate 1 local foundation: FastAPI + SQLite project/asset API with health endpoints and worker heartbeat.
+## Gate 3+ — Next
+- Media intelligence (transcript, scene detection, quality analysis)
+- AI Director with structured plan schema
+- Preview/final render split
+- Captions, thumbnails, and notifications
+- Automated QA suite
+- Real-project pilot
