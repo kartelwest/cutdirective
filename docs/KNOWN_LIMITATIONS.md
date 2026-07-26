@@ -7,7 +7,7 @@ This document tracks intentional v1 boundaries and gaps that are out of scope fo
 - **Cloud AI provider integration** — an OpenAI-compatible adapter is implemented (`OpenAIDirector`) and can be enabled with `AI_PROVIDER=openai` plus an API key. Advanced prompt hierarchy, multi-provider switching, and plan repair loops are not yet implemented.
 - **True source audio ducking/music mixing** — the renderer now mixes source audio segments into the output. It does not yet auto-duck background music under dialogue or mix external music tracks.
 - **Real-time job progress events** — jobs are polled via `/jobs/{id}`. A streaming or WebSocket event feed is not implemented.
-- **Durable worker queue** — the worker polls `/worker/health` for heartbeats and runs a simple local loop. A Celery/RQ/Celery Beat-backed queue is out of scope for v1.
+- **Durable worker queue** — implemented: render jobs are queued in the API and processed by a dedicated worker container that polls the database. The queue is not yet backed by Celery/RQ/RabbitMQ; it uses the SQLite database as the queue store.
 - **Advanced transitions and motion graphics** — only hard cuts and basic padding are supported. Transitions, lower-thirds, and animated graphics are future work.
 - **Manual NLE-style timeline editor** — the UI is wizard-driven, not a drag-and-drop timeline.
 - **Real-time collaboration / multi-user** — sessions are single-user per local instance.
