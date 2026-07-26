@@ -1,0 +1,13 @@
+[project]
+name = "cutdirective-worker"
+version = "0.1.0"
+description = "CutDirective AI durable worker"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+worker = "app.main:main"
+
+[tool.uv]
+package = false
