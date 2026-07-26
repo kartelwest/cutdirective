@@ -32,6 +32,12 @@ VOSK_MODEL_URL = os.getenv(
     "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
 )
 
+# AI Director
+AI_PROVIDER = os.getenv("AI_PROVIDER", "local")
+AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
+AI_MODEL = os.getenv("AI_MODEL", "gpt-4o")
+AI_API_KEY = os.getenv("AI_API_KEY", "")
+
 # Delivery / notifications
 DELIVERY_ROOT = Path(os.getenv("DELIVERY_ROOT", str(ROOT / "Deliveries"))).expanduser().resolve()
 DELIVERY_ROOT.mkdir(parents=True, exist_ok=True)

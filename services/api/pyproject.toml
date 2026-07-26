@@ -9,6 +9,7 @@ dependencies = [
     "alembic>=1.18.5",
     "email-validator>=2.3.0",
     "fastapi>=0.140.0",
+    "openai==1.30.0",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.32",

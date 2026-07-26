@@ -4,7 +4,7 @@ This document tracks intentional v1 boundaries and gaps that are out of scope fo
 
 ## Out of scope for v1
 
-- **Cloud AI provider integration** — the AI Director is a deterministic local adapter. The provider interface exists, but OpenAI/Anthropic/compatible adapters are not yet implemented. Cloud models require API keys and rate-limit handling.
+- **Cloud AI provider integration** — an OpenAI-compatible adapter is implemented (`OpenAIDirector`) and can be enabled with `AI_PROVIDER=openai` plus an API key. Advanced prompt hierarchy, multi-provider switching, and plan repair loops are not yet implemented.
 - **True source audio ducking/music mixing** — the renderer now mixes source audio segments into the output. It does not yet auto-duck background music under dialogue or mix external music tracks.
 - **Real-time job progress events** — jobs are polled via `/jobs/{id}`. A streaming or WebSocket event feed is not implemented.
 - **Durable worker queue** — the worker polls `/worker/health` for heartbeats and runs a simple local loop. A Celery/RQ/Celery Beat-backed queue is out of scope for v1.

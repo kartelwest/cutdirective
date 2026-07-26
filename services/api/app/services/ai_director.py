@@ -1,5 +1,8 @@
+import json
+from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from app import config
 from app.models import AnalysisResult, Asset, Project
 
 
@@ -16,6 +19,18 @@ DEFAULT_PRESETS = {
         "resolution": "1920x1080",
         "target_seconds": 60,
     },
+    "tiktok_9x16": {
+        "platform": "tiktok_9x16",
+        "ratio": "9:16",
+        "resolution": "1080x1920",
+        "target_seconds": 60,
+    },
+    "youtube_shorts": {
+        "platform": "youtube_shorts",
+        "ratio": "9:16",
+        "resolution": "1080x1920",
+        "target_seconds": 60,
+    },
     "custom": {
         "platform": "custom",
         "ratio": "9:16",
@@ -25,13 +40,66 @@ DEFAULT_PRESETS = {
 }
 
 
-class LocalAIDirector:
-    """Rule-based AI Director that works without external API keys."""
+PLAN_SCHEMA = {
+    "plan_version": "1.0",
+    "intent": {
+        "platform": "string",
+        "ratio": "string",
+        "resolution": "string (e.g. 1080x1920)",
+        "target_seconds": "number",
+        "goal": "string",
+        "audience": "string",
+    },
+    "assumptions": ["list of strings"],
+    "timeline": [
+        {
+            "asset_id": "asset UUID",
+            "source_in": "number (seconds)",
+            "source_out": "number (seconds)",
+            "speed": 1.0,
+            "crop": {"mode": "center|fit|fill"},
+            "transition_out": {"type": "hard_cut|fade|none"},
+            "reason": "string",
+        }
+    ],
+    "audio": {
+        "dialogue_target_lufs": -16,
+        "music_ducking_db": -12,
+    },
+    "graphics": {
+        "captions_enabled": True,
+        "sidecar_formats": ["srt"],
+    },
+    "exports": [
+        {
+            "name": "main|alternate_16x9",
+            "ratio": "9:16|16:9",
+            "resolution": "1080x1920|1920x1080",
+            "container": "mp4",
+            "video_codec": "h264",
+        }
+    ],
+    "expected_qa": ["list of strings"],
+    "confidence": "number 0.0-1.0",
+    "review_flags": ["list of strings"],
+}
+
+
+class BaseAIDirector(ABC):
+    """Pluggable director that turns project context + media analysis into a structured edit plan."""
 
     def __init__(self, project: Project, assets: List[Asset], analyses: List[AnalysisResult]):
         self.project = project
         self.assets = sorted(assets, key=lambda a: a.filename)
         self.analyses = {a.asset_id: a for a in analyses}
+
+    @abstractmethod
+    def generate_plan(self, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        ...
+
+
+class LocalAIDirector(BaseAIDirector):
+    """Rule-based AI Director that works without external API keys."""
 
     def _resolve_intent(self, overrides: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         brief = self.project.brief or {}
@@ -51,8 +119,8 @@ class LocalAIDirector:
         analysis = self.analyses.get(asset.id)
         if not analysis:
             return 0.0
-        black = analysis.quality.get("black_frames", [])
-        freeze = analysis.quality.get("freeze_frames", [])
+        black = analysis.quality.get("black_frames", []) or []
+        freeze = analysis.quality.get("freeze_frames", []) or []
         start = 0.0
         for seg in black + freeze:
             if seg["start"] <= start < seg["end"]:
@@ -123,7 +191,7 @@ class LocalAIDirector:
                 "video_codec": "h264",
             }
         ]
-        if intent["platform"] in ("instagram_reel", "custom"):
+        if intent["platform"] in ("instagram_reel", "custom", "tiktok_9x16", "youtube_shorts"):
             exports.append({
                 "name": "alternate_16x9",
                 "ratio": "16:9",
@@ -165,3 +233,128 @@ class LocalAIDirector:
             "confidence": round(confidence, 2),
             "review_flags": review_flags,
         }
+
+
+class OpenAIDirector(BaseAIDirector):
+    """AI Director backed by an OpenAI-compatible chat completion API."""
+
+    def _build_prompt(self, overrides: Optional[Dict[str, Any]]) -> str:
+        brief = self.project.brief or {}
+        preset = DEFAULT_PRESETS.get(self.project.preset, DEFAULT_PRESETS["custom"])
+        target = overrides.get("target_seconds") if overrides else None
+        target = target or brief.get("target_seconds") or preset["target_seconds"]
+        resolution = overrides.get("output_resolution") if overrides else None
+        resolution = resolution or brief.get("resolution") or preset["resolution"]
+
+        asset_summaries = []
+        for asset in self.assets:
+            meta = asset.metadata_json.get("video", {})
+            analysis = self.analyses.get(asset.id)
+            scenes = analysis.scenes if analysis else []
+            transcript_text = ""
+            if analysis and analysis.transcript:
+                transcript_text = analysis.transcript.get("text", "")
+            asset_summaries.append({
+                "id": asset.id,
+                "filename": asset.filename,
+                "duration": meta.get("duration"),
+                "resolution": meta.get("resolution"),
+                "fps": meta.get("fps"),
+                "scenes": scenes[:10],
+                "transcript": transcript_text,
+            })
+
+        prompt = (
+            "You are CutDirective AI Director, an expert video editor. "
+            "Given a project brief and analyzed source media, produce a structured edit plan as JSON.\n\n"
+            "Project brief:\n"
+            f"- goal: {brief.get('goal', 'Create a polished edit from the supplied footage')}\n"
+            f"- audience: {brief.get('audience', 'General audience')}\n"
+            f"- platform: {brief.get('platform') or preset['platform']}\n"
+            f"- preset: {self.project.preset}\n"
+            f"- target duration: {target} seconds\n"
+            f"- target resolution: {resolution}\n"
+            f"- approval mode: {self.project.approval_mode}\n\n"
+            "Source media summaries (id, duration, scenes, transcript excerpts):\n"
+        )
+        for summary in asset_summaries:
+            prompt += f"- {json.dumps(summary, default=str)}\n"
+
+        prompt += (
+            "\nOutput a single JSON object matching this schema exactly:\n"
+            f"{json.dumps(PLAN_SCHEMA, indent=2)}\n\n"
+            "Rules:\n"
+            "- Use the exact asset UUIDs from the summaries above for timeline.asset_id.\n"
+            "- source_in and source_out must be within each asset's actual duration.\n"
+            "- Trim silence/frozen/black frames if mentioned in the analysis context.\n"
+            "- Confidence should reflect how well the brief can be met with the supplied footage.\n"
+            "- Include any issues in review_flags.\n"
+            "- Do not include markdown, commentary, or code fences.\n"
+        )
+        return prompt
+
+    def _fallback(self, overrides: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        director = LocalAIDirector(self.project, self.assets, list(self.analyses.values()))
+        plan = director.generate_plan(overrides)
+        plan["review_flags"].insert(0, "OpenAI provider unavailable or misconfigured; used local rule-based director as fallback.")
+        plan["confidence"] = max(0.4, plan["confidence"] - 0.15)
+        return plan
+
+    def generate_plan(self, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        try:
+            from openai import OpenAI
+        except Exception:
+            return self._fallback(overrides)
+
+        if not config.AI_API_KEY:
+            return self._fallback(overrides)
+
+        client = OpenAI(api_key=config.AI_API_KEY, base_url=config.AI_BASE_URL)
+        prompt = self._build_prompt(overrides)
+
+        try:
+            response = client.chat.completions.create(
+                model=config.AI_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are an expert video editor. Return only valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.2,
+                max_tokens=2048,
+            )
+            content = response.choices[0].message.content
+            if not content:
+                return self._fallback(overrides)
+
+            plan = json.loads(content)
+            # Inject required fields that the model may omit or alter
+            plan["plan_version"] = plan.get("plan_version", "1.0")
+            plan["project_id"] = self.project.id
+            plan["source_fingerprints"] = [a.sha256 for a in self.assets]
+            if "audio" not in plan:
+                plan["audio"] = {"dialogue_target_lufs": -16, "music_ducking_db": -12}
+            if "graphics" not in plan:
+                plan["graphics"] = {"captions_enabled": True, "sidecar_formats": ["srt"]}
+            if "expected_qa" not in plan:
+                plan["expected_qa"] = [
+                    "Output file exists and is readable",
+                    "Duration is within target tolerance",
+                    "Resolution matches export preset",
+                ]
+            return plan
+        except Exception as exc:
+            plan = self._fallback(overrides)
+            plan["review_flags"].insert(0, f"OpenAI director failed: {exc}. Fallback used.")
+            return plan
+
+
+def get_ai_director(
+    project: Project,
+    assets: List[Asset],
+    analyses: List[AnalysisResult],
+) -> BaseAIDirector:
+    """Factory that selects the configured director provider."""
+    if config.AI_PROVIDER == "openai":
+        return OpenAIDirector(project, assets, analyses)
+    return LocalAIDirector(project, assets, analyses)

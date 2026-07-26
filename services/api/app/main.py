@@ -36,7 +36,7 @@ from app.schemas import (
     SettingUpdate,
     WorkerHeartbeatOut,
 )
-from app.services.ai_director import LocalAIDirector
+from app.services.ai_director import get_ai_director
 from app.services.analysis import analyze_asset
 from app.services.assets import ingest_asset
 from app.services.captions import write_caption_sidecar
@@ -268,7 +268,7 @@ def generate_plan(project_id: str, request: PlanRequest = PlanRequest(), db: Ses
         raise HTTPException(status_code=404, detail="Project not found")
     assets = db.query(Asset).filter(Asset.project_id == project_id).all()
     analyses = db.query(AnalysisResult).filter(AnalysisResult.project_id == project_id).all()
-    director = LocalAIDirector(project, assets, analyses)
+    director = get_ai_director(project, assets, analyses)
     plan_data = director.generate_plan(request.model_dump(exclude_unset=True))
 
     errors = validate_plan(plan_data, project, db)
@@ -344,7 +344,7 @@ def revise_plan(plan_id: str, request: PlanRequest = PlanRequest(), db: Session 
 
     assets = db.query(Asset).filter(Asset.project_id == project.id).all()
     analyses = db.query(AnalysisResult).filter(AnalysisResult.project_id == project.id).all()
-    director = LocalAIDirector(project, assets, analyses)
+    director = get_ai_director(project, assets, analyses)
     new_data = director.generate_plan(request.model_dump(exclude_unset=True))
 
     version = db.query(EditPlan).filter(EditPlan.project_id == project.id).count() + 1

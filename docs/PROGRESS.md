@@ -45,7 +45,10 @@
 - [x] Edit plans persisted (`EditPlan` model)
 - [x] Plan approve/reject/revise endpoints (`/plans/{id}/approve`, etc.)
 - [x] UI to analyze, generate plan, approve, and render from plan
-- [ ] Cloud LLM adapter and prompt hierarchy (planned)
+- [x] Provider-pluggable adapter (`BaseAIDirector`)
+- [x] OpenAI-compatible adapter (`OpenAIDirector`) with `AI_PROVIDER` / `AI_MODEL` / `AI_BASE_URL` / `AI_API_KEY` config
+- [x] Automatic fallback to local rule-based director when cloud provider is unavailable or unconfigured
+- [ ] Advanced prompt hierarchy and plan repair loop (planned)
 
 ## Gate 5 — Production workflow
 - [x] Preview render to `05_Previews` with half-resolution and lower bitrate
