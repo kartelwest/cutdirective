@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng
+
+      - name: Generate pilot test clip
+        run: |
+          mkdir -p sample-data
+          bash scripts/test-media/generate_pilot_clip.sh sample-data/pilot_clip.mp4
+
+      - name: Build Docker Compose stack
+        run: |
+          docker compose -f infra/docker-compose.yml build
+
+      - name: Start services
+        run: |
+          docker compose -f infra/docker-compose.yml up -d
+
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do
+            curl -fs http://localhost:8000/health && break
+            sleep 2
+          done
+
+      - name: Run integration test
+        run: |
+          API=http://localhost:8000 bash scripts/integration-test.sh
+
+      - name: Stop services
+        if: always()
+        run: |
+          docker compose -f infra/docker-compose.yml down

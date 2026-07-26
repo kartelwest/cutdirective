@@ -139,9 +139,12 @@ class LocalAIDirector:
             "Center-crop is used for vertical/horizontal reframing unless brief specifies otherwise.",
         ]
 
+        fingerprints = [a.sha256 for a in self.assets]
+
         return {
             "plan_version": "1.0",
             "project_id": self.project.id,
+            "source_fingerprints": fingerprints,
             "intent": intent,
             "assumptions": assumptions,
             "timeline": timeline,

@@ -25,6 +25,7 @@ class Project(Base):
     preset = Column(String, default="custom")
     approval_mode = Column(String, default="plan_preview")
     brief = Column(JSON, default=dict)
+    notification_recipients = Column(JSON, default=list)
     settings = Column(JSON, default=dict)
     created_at = Column(DateTime, default=now_utc)
     updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
@@ -104,3 +105,27 @@ class Setting(Base):
     key = Column(String, unique=True, nullable=False)
     value = Column(JSON, default=dict)
     updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+class EditPlan(Base):
+    __tablename__ = "edit_plans"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    version = Column(Integer, default=1)
+    status = Column(String, default="DRAFT")
+    plan_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=now_utc)
+    approved_at = Column(DateTime, nullable=True)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=True)
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=True)
+    action = Column(String, nullable=False)
+    actor = Column(String, default="system")
+    details = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=now_utc)

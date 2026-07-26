@@ -2,21 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { AnalysisResult, API_URL, Asset, Job, Notification, Project } from "@/lib/api";
-
-interface EditPlan {
-  plan_version: string;
-  project_id: string;
-  intent: Record<string, unknown>;
-  assumptions: string[];
-  timeline: Array<Record<string, unknown>>;
-  audio: Record<string, unknown>;
-  graphics: Record<string, unknown>;
-  exports: Array<Record<string, unknown>>;
-  expected_qa: string[];
-  confidence: number;
-  review_flags: string[];
-}
+import { AnalysisResult, API_URL, Asset, EditPlan, Job, Notification, Project } from "@/lib/api";
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,20 +14,25 @@ export default function ProjectPage() {
   const [uploading, setUploading] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [plan, setPlan] = useState<EditPlan | null>(null);
+  const [plans, setPlans] = useState<EditPlan[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
   const [delivery, setDelivery] = useState<Record<string, unknown> | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
-    const [p, a, an, n] = await Promise.all([
+    const [p, a, an, n, pl] = await Promise.all([
       fetch(`${API_URL}/projects/${id}`).then((r) => r.json()),
       fetch(`${API_URL}/projects/${id}/assets`).then((r) => r.json()),
       fetch(`${API_URL}/projects/${id}/analysis`).then((r) => r.json()).catch(() => []),
       fetch(`${API_URL}/projects/${id}/notifications`).then((r) => r.json()).catch(() => []),
+      fetch(`${API_URL}/projects/${id}/plans`).then((r) => r.json()).catch(() => []),
     ]);
     setProject(p);
     setAssets(a);
     setAnalysis(an);
     setNotifications(n);
+    setPlans(pl);
+    if (!plan && pl.length > 0) setPlan(pl[0]);
   }
 
   useEffect(() => {
@@ -65,6 +56,7 @@ export default function ProjectPage() {
 
   async function analyze() {
     setLoading("analyzing");
+    setError(null);
     const res = await fetch(`${API_URL}/projects/${id}/analyze`, { method: "POST" });
     const j = await res.json();
     setJob(j);
@@ -74,30 +66,45 @@ export default function ProjectPage() {
 
   async function generatePlan() {
     setLoading("planning");
+    setError(null);
     const res = await fetch(`${API_URL}/projects/${id}/plan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ target_seconds: 4 }),
     });
     const p = await res.json();
+    if (!res.ok) setError(String(p.detail || "Plan failed"));
+    else setPlan(p);
+    setLoading(null);
+    await refresh();
+  }
+
+  async function approvePlan() {
+    if (!plan) return;
+    setLoading("approving");
+    const res = await fetch(`${API_URL}/plans/${plan.id}/approve`, { method: "POST" });
+    const p = await res.json();
     setPlan(p);
     setLoading(null);
+    await refresh();
   }
 
   async function render(preview: boolean) {
     if (!plan) return;
     setLoading(preview ? "rendering-preview" : "rendering-final");
+    setError(null);
     const res = await fetch(`${API_URL}/projects/${id}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        plan,
+        plan_id: plan.id,
         output_name: preview ? "preview" : "final",
         preview,
       }),
     });
     const j = await res.json();
-    setJob(j);
+    if (!res.ok) setError(String(j.detail || "Render failed"));
+    else setJob(j);
     setLoading(null);
     await refresh();
   }
@@ -123,7 +130,13 @@ export default function ProjectPage() {
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-12">
       <h1 className="text-2xl font-bold">{project.name}</h1>
-      <p className="text-zinc-500">{project.client_name || "No client"} · {project.preset}</p>
+      <p className="text-zinc-500">{project.client_name || "No client"} · {project.preset} · {project.approval_mode}</p>
+
+      {error && (
+        <div className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <section className="mt-8 rounded-xl border border-zinc-200 p-6">
         <h2 className="mb-4 font-semibold">Assets</h2>
@@ -188,6 +201,15 @@ export default function ProjectPage() {
           >
             {loading === "planning" ? "Planning…" : "Generate plan"}
           </button>
+          {plan?.status === "DRAFT" && (
+            <button
+              onClick={approvePlan}
+              disabled={loading === "approving"}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+            >
+              {loading === "approving" ? "Approving…" : "Approve plan"}
+            </button>
+          )}
           <button
             onClick={() => render(true)}
             disabled={!plan || loading === "rendering-preview"}
@@ -197,7 +219,7 @@ export default function ProjectPage() {
           </button>
           <button
             onClick={() => render(false)}
-            disabled={!plan || loading === "rendering-final"}
+            disabled={!plan || plan.status !== "APPROVED" || loading === "rendering-final"}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
           >
             {loading === "rendering-final" ? "Rendering final…" : "Render final"}
@@ -206,7 +228,7 @@ export default function ProjectPage() {
 
         {plan && (
           <div className="mt-4 rounded-lg bg-zinc-50 p-4 text-sm">
-            <p><span className="font-medium">Confidence:</span> {plan.confidence}</p>
+            <p><span className="font-medium">Status:</span> {plan.status} · <span className="font-medium">Confidence:</span> {plan.confidence}</p>
             <p><span className="font-medium">Review flags:</span> {plan.review_flags.join(", ") || "none"}</p>
             <p><span className="font-medium">Timeline:</span> {plan.timeline.length} segments</p>
             <pre className="mt-2 max-h-48 overflow-auto rounded bg-zinc-100 p-2 text-xs">

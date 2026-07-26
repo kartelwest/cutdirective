@@ -14,18 +14,20 @@
 - [x] Workspace creation with numbered folders
 - [x] Asset intake with copy, fingerprint (SHA-256), and ffprobe metadata
 - [x] SQLite persistence with SQLAlchemy
+- [x] Alembic migrations committed to `services/api/alembic/`
 - [x] Worker heartbeat (polling `/health`)
 - [x] Job persistence (`Job` model and `/jobs/{id}`)
 - [x] Disk-space health check
-- [ ] Durable retry / cancel / restart (planned)
+- [x] `/jobs` list and `/jobs/{id}/retry` endpoints
 
 ## Gate 2 — Deterministic rendering without AI
 - [x] Hand-authored edit plan accepted via `POST /projects/{id}/render`
 - [x] Plan validation against real asset IDs and workspace paths
 - [x] FFmpeg concat with scaling/padding to target resolution
+- [x] Source audio mixed into the rendered output
 - [x] Real rendered MP4 (`docker_vertical_v01.mp4`, 1080x1920)
 - [x] Basic QA probe after render
-- [ ] Full operation registry and unit tests (planned)
+- [x] Structured plan validator and whitelisted operation registry (`app/services/plan_validator.py`)
 
 ## Gate 3 — Media intelligence
 - [x] ffprobe metadata and corruption check
@@ -40,24 +42,23 @@
 - [x] Reads brief, preset, asset metadata, and analysis results
 - [x] Generates structured edit plan with intent, assumptions, timeline, audio, graphics, exports, QA, confidence, review flags
 - [x] `POST /projects/{id}/plan` endpoint
-- [x] UI to analyze, generate plan, and render from plan
+- [x] Edit plans persisted (`EditPlan` model)
+- [x] Plan approve/reject/revise endpoints (`/plans/{id}/approve`, etc.)
+- [x] UI to analyze, generate plan, approve, and render from plan
 - [ ] Cloud LLM adapter and prompt hierarchy (planned)
-- [ ] Full plan validation/repair loop (planned)
 
 ## Gate 5 — Production workflow
 - [x] Preview render to `05_Previews` with half-resolution and lower bitrate
 - [x] Final render to `06_Final-Exports`
 - [x] Multiple outputs from a single plan (e.g., main + alternate 16:9)
-- [x] Silent AAC audio track added to every output
+- [x] Source audio mixed and loudness-normalized
 - [x] Thumbnail generation to `08_Thumbnails`
 - [x] SRT sidecar generation to `07_Captions`
 - [x] Versioned output file naming
 - [x] Basic `POST /jobs/{id}/cancel` endpoint
-- [x] UI buttons for preview vs final and output review
-- [ ] Source audio mixing and ducking (planned)
+- [x] UI buttons for preview vs final, plan approval, and output review
 - [ ] Watermarked preview burn-in (planned)
 - [ ] Background worker render queue with real-time progress (planned)
-- [ ] Retry/restart from a failed stage (planned)
 
 ## Gate 6 — QA, notifications, and delivery
 - [x] Automated QA per output (duration, resolution, codec, pixel format, bitrate, black/freeze frames, audio presence)
@@ -74,7 +75,7 @@
 - [x] Backup/restore scripts (`scripts/backup.sh`, `scripts/restore.sh`)
 - [x] Integration test script (`scripts/integration-test.sh`)
 - [x] Real-project pilot with a generated speech+scene clip
-- [x] End-to-end verification: analyze → plan → render → QA → package → deliver → notify
+- [x] End-to-end verification: analyze → plan → approve → render → QA → package → deliver → notify
+- [x] `docs/KNOWN_LIMITATIONS.md` published
 - [ ] Cloud LLM adapter for the AI Director (planned)
-- [ ] Source audio mixing/ducking and watermarked previews (planned)
 - [ ] Background worker render queue with real-time progress and retry/restart (planned)

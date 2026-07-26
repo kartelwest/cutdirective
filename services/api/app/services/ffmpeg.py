@@ -68,26 +68,51 @@ def render_concat(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     inputs: List[str] = []
-    filters: List[str] = []
+    video_filters: List[str] = []
+    audio_filters: List[str] = []
+    delayed_labels: List[str] = []
     total_duration = 0.0
     for idx, sel in enumerate(selections):
         src = Path(sel["workspace_path"])
         start = float(sel["source_in"])
         end = float(sel["source_out"])
-        duration = end - start
+        duration = round(end - start, 6)
         total_duration += duration
         inputs.extend(["-ss", str(start), "-t", str(duration), "-i", str(src)])
-        filters.append(
+        video_filters.append(
             f"[{idx}:v]setpts=PTS-STARTPTS,scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2[v{idx}];"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2[v{idx}]"
         )
+
+        has_audio = has_audio_stream(probe(src))
+        if has_audio:
+            audio_filters.append(
+                f"[{idx}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo:sample_rates=48000,"
+                f"atrim=0:{duration},asetpts=PTS-STARTPTS[a{idx}]"
+            )
+        else:
+            audio_filters.append(
+                f"anullsrc=r=48000:cl=stereo,atrim=0:{duration},asetpts=PTS-STARTPTS[a{idx}]"
+            )
+
+        delay_ms = int(round(total_duration - duration, 3) * 1000)
+        audio_filters.append(
+            f"[a{idx}]adelay=delays={delay_ms}:all=1[d{idx}]"
+        )
+        delayed_labels.append(f"[d{idx}]")
+
     v_concats = "".join(f"[v{idx}]" for idx in range(len(selections)))
-    filters.append(f"{v_concats}concat=n={len(selections)}:v=1:a=0[outv]")
-    # Add a silent stereo audio track covering the full duration. Source audio mixing is planned.
-    filters.append(
-        f";anullsrc=channel_layout=stereo:sample_rate=48000,atrim=start=0:end={total_duration},asetpts=PTS-STARTPTS[outa]"
+    video_filters.append(f"{v_concats}concat=n={len(selections)}:v=1:a=0[outv]")
+
+    amix_inputs = "".join(delayed_labels)
+    audio_filters.append(
+        f"{amix_inputs}amix=inputs={len(selections)}:duration=longest:normalize=0,"
+        f"aformat=sample_fmts=fltp:channel_layouts=stereo:sample_rates=48000,"
+        f"loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,"
+        f"aformat=sample_fmts=fltp:channel_layouts=stereo:sample_rates=48000[outa]"
     )
-    filter_complex = "".join(filters)
+
+    filter_complex = ";".join(video_filters + audio_filters)
 
     cmd = [FFMPEG_PATH, "-y"]
     cmd.extend(inputs)

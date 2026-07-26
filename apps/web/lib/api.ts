@@ -9,6 +9,7 @@ export interface Project {
   preset: string;
   approval_mode: string;
   brief: Record<string, unknown>;
+  notification_recipients: string[];
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +37,26 @@ export interface AnalysisResult {
   audio_events: Record<string, unknown>;
   quality: Record<string, unknown>;
   created_at: string;
+}
+
+export interface EditPlan {
+  id: string;
+  version: number;
+  plan_version: string;
+  project_id: string;
+  source_fingerprints: string[];
+  intent: Record<string, unknown>;
+  assumptions: string[];
+  timeline: Array<Record<string, unknown>>;
+  audio: Record<string, unknown>;
+  graphics: Record<string, unknown>;
+  exports: Array<Record<string, unknown>>;
+  expected_qa: string[];
+  confidence: number;
+  review_flags: string[];
+  status: string;
+  created_at: string;
+  approved_at?: string | null;
 }
 
 export interface Job {

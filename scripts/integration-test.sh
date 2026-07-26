@@ -48,15 +48,20 @@ printf '\nGenerating edit plan...\n'
 PLAN=$(curl -fs -X POST "$API/projects/$PROJECT_ID/plan" -H 'Content-Type: application/json' -d '{"target_seconds":4}')
 echo "$PLAN" | python3 -m json.tool | head -n 30
 CONFIDENCE=$(echo "$PLAN" | python3 -c 'import sys,json; print(json.load(sys.stdin)["confidence"])')
+PLAN_ID=$(echo "$PLAN" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 echo "Confidence: $CONFIDENCE"
+echo "Plan ID: $PLAN_ID"
 
 if [ "$CONFIDENCE" = "0" ] || [ -z "$CONFIDENCE" ]; then
   echo "FAIL: plan confidence is zero" >&2
   exit 1
 fi
 
+printf '\nApproving edit plan...\n'
+curl -fs -X POST "$API/plans/$PLAN_ID/approve" | python3 -m json.tool | head -n 10
+
 printf '\nRendering final...\n'
-FINAL=$(curl -fs -X POST "$API/projects/$PROJECT_ID/render" -H 'Content-Type: application/json' -d "{\"plan\":$PLAN,\"output_name\":\"final\",\"preview\":false}")
+FINAL=$(curl -fs -X POST "$API/projects/$PROJECT_ID/render" -H 'Content-Type: application/json' -d "{\"plan_id\":\"$PLAN_ID\",\"output_name\":\"final\",\"preview\":false}")
 echo "$FINAL" | python3 -m json.tool | head -n 40
 OK=$(echo "$FINAL" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(all(o["qa"]["ok"] for o in d["outputs"]))')
 if [ "$OK" != "True" ]; then
