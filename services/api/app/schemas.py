@@ -59,8 +59,10 @@ class JobOut(BaseModel):
     id: str
     project_id: str
     stage: str
-    progress: float
     status: str
+    payload: Optional[Dict[str, Any]] = None
+    worker_id: Optional[str] = None
+    progress: float
     outputs: List[Dict[str, Any]]
     logs: str
     created_at: datetime

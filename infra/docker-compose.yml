@@ -23,8 +23,16 @@ services:
       dockerfile: infra/docker/Dockerfile.worker
     environment:
       - API_URL=http://api:8000
-      - WORKER_HEARTBEAT_INTERVAL_SECONDS=10
+      - CUTDIRECTIVE_ROOT=/app/CutDirective
+      - DATA_DIR=/app/data
+      - DATABASE_URL=sqlite:////app/data/cutdirective.db
+      - FFMPEG_PATH=/usr/bin/ffmpeg
+      - FFPROBE_PATH=/usr/bin/ffprobe
       - WORKER_ID=worker-001
+      - WORKER_POLL_INTERVAL=5
+    volumes:
+      - cutdirective-data:/app/data
+      - cutdirective-workspace:/app/CutDirective
     depends_on:
       - api
 

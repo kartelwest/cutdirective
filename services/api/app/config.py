@@ -38,6 +38,11 @@ AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
 AI_MODEL = os.getenv("AI_MODEL", "gpt-4o")
 AI_API_KEY = os.getenv("AI_API_KEY", "")
 
+# Worker
+SYNC_RENDER = os.getenv("SYNC_RENDER", "false").lower() in ("true", "1", "yes")
+WORKER_ID = os.getenv("WORKER_ID", "worker-001")
+WORKER_POLL_INTERVAL = int(os.getenv("WORKER_POLL_INTERVAL", "5"))
+
 # Delivery / notifications
 DELIVERY_ROOT = Path(os.getenv("DELIVERY_ROOT", str(ROOT / "Deliveries"))).expanduser().resolve()
 DELIVERY_ROOT.mkdir(parents=True, exist_ok=True)

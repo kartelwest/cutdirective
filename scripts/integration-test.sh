@@ -60,8 +60,35 @@ fi
 printf '\nApproving edit plan...\n'
 curl -fs -X POST "$API/plans/$PLAN_ID/approve" | python3 -m json.tool | head -n 10
 
-printf '\nRendering final...\n'
-FINAL=$(curl -fs -X POST "$API/projects/$PROJECT_ID/render" -H 'Content-Type: application/json' -d "{\"plan_id\":\"$PLAN_ID\",\"output_name\":\"final\",\"preview\":false}")
+printf '\nRendering final (queued)...\n'
+JOB=$(curl -fs -X POST "$API/projects/$PROJECT_ID/render" -H 'Content-Type: application/json' -d "{\"plan_id\":\"$PLAN_ID\",\"output_name\":\"final\",\"preview\":false}")
+JOB_ID=$(echo "$JOB" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+echo "Job ID: $JOB_ID"
+echo "$JOB" | python3 -m json.tool | head -n 20
+
+printf '\nWaiting for job to complete...\n'
+for i in {1..60}; do
+  STATUS_JSON=$(curl -fs "$API/jobs/$JOB_ID")
+  STATUS=$(echo "$STATUS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+  PROGRESS=$(echo "$STATUS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["progress"])')
+  echo "  status=$STATUS progress=$PROGRESS"
+  if [ "$STATUS" = "COMPLETED" ] || [ "$STATUS" = "COMPLETED_WITH_WARNINGS" ]; then
+    FINAL="$STATUS_JSON"
+    break
+  fi
+  if [ "$STATUS" = "FAILED" ]; then
+    echo "FAIL: render job failed" >&2
+    echo "$STATUS_JSON" | python3 -m json.tool >&2
+    exit 1
+  fi
+  sleep 2
+done
+
+if [ -z "${FINAL:-}" ]; then
+  echo "FAIL: render job did not complete in time" >&2
+  exit 1
+fi
+
 echo "$FINAL" | python3 -m json.tool | head -n 40
 OK=$(echo "$FINAL" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(all(o["qa"]["ok"] for o in d["outputs"]))')
 if [ "$OK" != "True" ]; then
