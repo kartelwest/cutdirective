@@ -78,10 +78,15 @@ def create_notification(
     return n
 
 
-def notify_render_complete(db: Session, project_id: str, job_id: str, outputs: list) -> None:
+def notify_render_complete(db: Session, project_id: str, job_id: str, outputs: list, recipients: list[str] | None = None) -> None:
     subject = "Render complete"
     body = f"Job {job_id} completed. Outputs: {outputs}"
+    recipients = recipients or [config.SMTP_FROM]
     for channel in config.NOTIFICATION_CHANNELS:
-        create_notification(
-            db, project_id, job_id, channel.strip(), config.SMTP_FROM, subject, body
-        )
+        channel = channel.strip()
+        if channel == "in_app":
+            create_notification(db, project_id, job_id, channel, "", subject, body)
+        elif channel == "smtp":
+            for recipient in recipients:
+                if recipient:
+                    create_notification(db, project_id, job_id, channel, recipient, subject, body)

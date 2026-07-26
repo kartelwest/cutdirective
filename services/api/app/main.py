@@ -522,7 +522,7 @@ def render_project(project_id: str, request: RenderRequest, db: Session = Depend
         job.outputs = outputs
         job.logs = f"Rendered {len(outputs)} outputs; QA complete"
 
-        notify_render_complete(db, project.id, job.id, outputs)
+        notify_render_complete(db, project.id, job.id, outputs, project.notification_recipients or [config.SMTP_FROM])
         log_audit(db, "render_complete", project_id=project.id, job_id=job.id, details={"outputs": [o["name"] for o in outputs]})
     except Exception as exc:
         job.status = "FAILED"
