@@ -62,16 +62,20 @@ def render_concat(
     output_path: Path,
     width: int = 1080,
     height: int = 1920,
+    crf: int = 23,
+    video_bitrate: Optional[str] = None,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     inputs: List[str] = []
     filters: List[str] = []
+    total_duration = 0.0
     for idx, sel in enumerate(selections):
         src = Path(sel["workspace_path"])
         start = float(sel["source_in"])
         end = float(sel["source_out"])
         duration = end - start
+        total_duration += duration
         inputs.extend(["-ss", str(start), "-t", str(duration), "-i", str(src)])
         filters.append(
             f"[{idx}:v]setpts=PTS-STARTPTS,scale={width}:{height}:force_original_aspect_ratio=decrease,"
@@ -79,21 +83,28 @@ def render_concat(
         )
     v_concats = "".join(f"[v{idx}]" for idx in range(len(selections)))
     filters.append(f"{v_concats}concat=n={len(selections)}:v=1:a=0[outv]")
+    # Add a silent stereo audio track covering the full duration. Source audio mixing is planned.
+    filters.append(
+        f";anullsrc=channel_layout=stereo:sample_rate=48000,atrim=start=0:end={total_duration},asetpts=PTS-STARTPTS[outa]"
+    )
     filter_complex = "".join(filters)
 
-    # Build final command: video inputs only with deterministic concat.
-    # Audio mixing will be added once the operation registry is expanded.
     cmd = [FFMPEG_PATH, "-y"]
     cmd.extend(inputs)
     cmd.extend([
         "-filter_complex", filter_complex,
         "-map", "[outv]",
+        "-map", "[outa]",
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
-        "-crf", "23",
+        "-crf", str(crf),
+        "-c:a", "aac",
+        "-b:a", "192k",
         "-movflags", "+faststart",
-        str(output_path),
     ])
+    if video_bitrate:
+        cmd.extend(["-b:v", video_bitrate])
+    cmd.extend([str(output_path)])
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -218,3 +229,36 @@ def volume_detect(path: Path) -> Dict[str, Any]:
 
 def has_audio_stream(probe_data: Dict[str, Any]) -> bool:
     return any(s.get("codec_type") == "audio" for s in probe_data.get("streams", []))
+
+
+def generate_thumbnail(video_path: Path, output_path: Path, time_offset: str = "1") -> None:
+    """Extract a single-frame thumbnail as JPEG."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        FFMPEG_PATH,
+        "-y",
+        "-ss", time_offset,
+        "-i", str(video_path),
+        "-vframes", "1",
+        "-q:v", "2",
+        str(output_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Thumbnail failed: {result.stderr}")
+
+
+def burn_captions(video_path: Path, srt_path: Path, output_path: Path) -> None:
+    """Burn an SRT caption file into the video using the subtitles filter."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        FFMPEG_PATH,
+        "-y",
+        "-i", str(video_path),
+        "-vf", f"subtitles={srt_path}",
+        "-c:a", "copy",
+        str(output_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Caption burn-in failed: {result.stderr}")

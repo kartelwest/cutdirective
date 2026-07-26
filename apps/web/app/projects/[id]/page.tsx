@@ -80,13 +80,17 @@ export default function ProjectPage() {
     setLoading(null);
   }
 
-  async function renderPlan() {
+  async function render(preview: boolean) {
     if (!plan) return;
-    setLoading("rendering");
+    setLoading(preview ? "rendering-preview" : "rendering-final");
     const res = await fetch(`${API_URL}/projects/${id}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan, output_name: "ai_render_v01.mp4" }),
+      body: JSON.stringify({
+        plan,
+        output_name: preview ? "preview" : "final",
+        preview,
+      }),
     });
     const j = await res.json();
     setJob(j);
@@ -164,11 +168,18 @@ export default function ProjectPage() {
             {loading === "planning" ? "Planning…" : "Generate plan"}
           </button>
           <button
-            onClick={renderPlan}
-            disabled={!plan || loading === "rendering"}
+            onClick={() => render(true)}
+            disabled={!plan || loading === "rendering-preview"}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+          >
+            {loading === "rendering-preview" ? "Rendering preview…" : "Render preview"}
+          </button>
+          <button
+            onClick={() => render(false)}
+            disabled={!plan || loading === "rendering-final"}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
           >
-            {loading === "rendering" ? "Rendering…" : "Render plan"}
+            {loading === "rendering-final" ? "Rendering final…" : "Render final"}
           </button>
         </div>
 
@@ -188,7 +199,12 @@ export default function ProjectPage() {
             <p><span className="font-medium">Status:</span> {job.status}</p>
             <p><span className="font-medium">Stage:</span> {job.stage}</p>
             {job.outputs.map((o, i) => (
-              <p key={i} className="mt-1 break-all text-zinc-600">{JSON.stringify(o)}</p>
+              <div key={i} className="mt-2 border-t border-zinc-200 pt-2">
+                <p className="font-medium">{String(o.name || "")} · {String(o.resolution || "")} · {Number(o.duration || 0).toFixed(2)}s · {String(o.kind || "")}</p>
+                {o.thumbnail_path ? <p className="text-zinc-500">thumb: {String(o.thumbnail_path)}</p> : null}
+                {o.caption_path ? <p className="text-zinc-500">caption: {String(o.caption_path)}</p> : null}
+                <p className="break-all text-zinc-600">{String(o.path || "")}</p>
+              </div>
             ))}
           </div>
         )}

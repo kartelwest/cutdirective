@@ -27,7 +27,8 @@ from app.schemas import (
 from app.services.ai_director import LocalAIDirector
 from app.services.analysis import analyze_asset
 from app.services.assets import ingest_asset
-from app.services.ffmpeg import probe, render_concat
+from app.services.captions import write_caption_sidecar
+from app.services.ffmpeg import generate_thumbnail, probe, render_concat
 from app.services.workspace import allowed_path, create_project_workspace
 
 Base.metadata.create_all(bind=engine)
@@ -170,6 +171,20 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
     return job
 
 
+@app.post("/jobs/{job_id}/cancel", response_model=JobOut)
+def cancel_job(job_id: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in ("COMPLETED", "FAILED"):
+        job.status = "CANCELED"
+        job.logs = "Canceled by user"
+        job.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(job)
+    return job
+
+
 @app.get("/projects/{project_id}/analysis", response_model=list[AnalysisResultOut])
 def list_analysis(project_id: str, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -200,7 +215,8 @@ def render_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    job = Job(project_id=project.id, stage="RENDERING", status="RUNNING", progress=0.0)
+    stage = "PREVIEW" if request.preview else "RENDERING"
+    job = Job(project_id=project.id, stage=stage, status="RUNNING", progress=0.0)
     db.add(job)
     db.commit()
     db.refresh(job)
@@ -211,7 +227,6 @@ def render_project(
         if not selections:
             raise ValueError("Edit plan has no timeline selections")
 
-        # Map asset_id to workspace path
         assets_by_id = {a.id: a for a in db.query(Asset).filter(Asset.project_id == project_id).all()}
         mapped = []
         for sel in selections:
@@ -227,36 +242,101 @@ def render_project(
                 "workspace_path": workspace_path,
             })
 
-        export = plan.get("exports", [{}])[0]
-        width, height = 1080, 1920
-        res = export.get("resolution", "1080x1920")
-        if "x" in res:
-            width, height = map(int, res.split("x"))
+        exports = plan.get("exports", [{}])
+        if request.preview:
+            exports = exports[:1]
 
-        output_name = request.output_name
-        if not output_name.endswith(".mp4"):
-            output_name += ".mp4"
-        output_path = Path(project.workspace_path) / "06_Final-Exports" / output_name
+        base_name = request.output_name or "output"
+        if base_name.endswith(".mp4"):
+            base_name = base_name[:-4]
 
-        render_concat(mapped, output_path, width=width, height=height)
+        graphics = plan.get("graphics", {})
+        captions_enabled = graphics.get("captions_enabled", False)
 
-        # Basic QA probe
-        qa = probe(output_path)
-        if not qa.get("readable"):
-            raise RuntimeError("Rendered output is not readable after probing")
-
-        output_entry = {
-            "name": output_name,
-            "path": str(output_path),
-            "resolution": res,
-            "duration": float(qa.get("format", {}).get("duration", 0) or 0),
+        analyses_by_asset = {
+            a.asset_id: a
+            for a in db.query(AnalysisResult).filter(AnalysisResult.project_id == project_id).all()
         }
+
+        outputs: list[dict] = []
+        for idx, export in enumerate(exports):
+            res = export.get("resolution", "1080x1920")
+            width, height = 1080, 1920
+            if "x" in res:
+                width, height = map(int, res.split("x"))
+
+            crf = 23
+            bitrate: str | None = None
+            if request.preview:
+                width = max(width // 2, 320)
+                height = max(height // 2, 480)
+                crf = 28
+                bitrate = "2M"
+
+            folder = "05_Previews" if request.preview else "06_Final-Exports"
+            export_name = export.get("name") or f"export_{idx}"
+            out_dir = Path(project.workspace_path) / folder
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            existing = list(out_dir.glob(f"{base_name}_{export_name}_v*.mp4"))
+            version = len(existing) + 1
+            output_name = f"{base_name}_{export_name}_v{version:02d}.mp4"
+            output_path = out_dir / output_name
+
+            render_concat(mapped, output_path, width=width, height=height, crf=crf, video_bitrate=bitrate)
+
+            qa = probe(output_path)
+            if not qa.get("readable"):
+                raise RuntimeError(f"Rendered output is not readable: {output_path}")
+
+            output_entry = {
+                "name": output_name,
+                "path": str(output_path),
+                "resolution": f"{width}x{height}",
+                "duration": float(qa.get("format", {}).get("duration", 0) or 0),
+                "kind": "preview" if request.preview else "final",
+            }
+
+            thumb_dir = Path(project.workspace_path) / "08_Thumbnails"
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            thumb_path = thumb_dir / f"{output_name}_thumb.jpg"
+            try:
+                generate_thumbnail(output_path, thumb_path, "1")
+                output_entry["thumbnail_path"] = str(thumb_path)
+            except Exception:
+                pass
+
+            if captions_enabled:
+                srt_segments: list[dict] = []
+                cursor = 0.0
+                for sel in selections:
+                    offset = float(sel.get("source_in", 0))
+                    duration = float(sel.get("source_out", 0)) - offset
+                    ana = analyses_by_asset.get(sel.get("asset_id"))
+                    if ana and ana.transcript:
+                        for seg in ana.transcript.get("segments", []):
+                            start = max(0.0, float(seg.get("start", 0)) - offset) + cursor
+                            end = max(0.0, float(seg.get("end", 0)) - offset) + cursor
+                            text = seg.get("text", "").strip()
+                            if text:
+                                srt_segments.append({"start": start, "end": end, "text": text})
+                    cursor += duration
+                if srt_segments:
+                    srt_dir = Path(project.workspace_path) / "07_Captions"
+                    srt_dir.mkdir(parents=True, exist_ok=True)
+                    srt_path = srt_dir / f"{output_name}.srt"
+                    write_caption_sidecar(srt_segments, srt_path)
+                    output_entry["caption_path"] = str(srt_path)
+
+            outputs.append(output_entry)
+            job.progress = round((idx + 1) / len(exports), 2)
+            db.commit()
 
         job.stage = "QA"
         job.progress = 1.0
         job.status = "COMPLETED"
-        job.outputs = [output_entry]
-        job.logs = f"Rendered {output_name} at {output_path}"
+        job.outputs = outputs
+        job.logs = f"Rendered {len(outputs)} outputs"
     except Exception as exc:
         job.status = "FAILED"
         job.logs = str(exc)

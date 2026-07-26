@@ -117,3 +117,4 @@ class WorkerHeartbeatOut(BaseModel):
 class RenderRequest(BaseModel):
     plan: Dict[str, Any]
     output_name: Optional[str] = "output.mp4"
+    preview: bool = False
