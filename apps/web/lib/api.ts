@@ -49,3 +49,15 @@ export interface Job {
   created_at: string;
   updated_at: string;
 }
+
+export interface Notification {
+  id: string;
+  project_id: string;
+  job_id: string | null;
+  channel: string;
+  recipient: string | null;
+  subject: string;
+  body: string;
+  status: string;
+  created_at: string;
+}

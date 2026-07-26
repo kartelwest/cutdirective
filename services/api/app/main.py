@@ -10,13 +10,15 @@ from sqlalchemy.orm import Session
 
 from app import config, schemas
 from app.database import SessionLocal, engine, Base
-from app.models import AnalysisResult, Asset, Job, Preset, Project, Setting
+from app.models import AnalysisResult, Asset, Job, Notification, Preset, Project, Setting
 from app.schemas import (
     AnalysisResultOut,
     AssetOut,
     EditPlanOut,
     HealthOut,
     JobOut,
+    NotificationCreate,
+    NotificationOut,
     PlanRequest,
     ProjectCreate,
     ProjectOut,
@@ -28,7 +30,10 @@ from app.services.ai_director import LocalAIDirector
 from app.services.analysis import analyze_asset
 from app.services.assets import ingest_asset
 from app.services.captions import write_caption_sidecar
+from app.services.delivery import deliver_to_local_drive, package_project
 from app.services.ffmpeg import generate_thumbnail, probe, render_concat
+from app.services.notifications import create_notification, notify_render_complete
+from app.services.qa import run_qa
 from app.services.workspace import allowed_path, create_project_workspace
 
 Base.metadata.create_all(bind=engine)
@@ -328,15 +333,26 @@ def render_project(
                     write_caption_sidecar(srt_segments, srt_path)
                     output_entry["caption_path"] = str(srt_path)
 
+            expected_duration = sum(
+                float(sel.get("source_out", 0)) - float(sel.get("source_in", 0))
+                for sel in selections
+            )
+            output_entry["qa"] = run_qa(output_path, expected_duration, f"{width}x{height}")
+
             outputs.append(output_entry)
             job.progress = round((idx + 1) / len(exports), 2)
             db.commit()
 
         job.stage = "QA"
         job.progress = 1.0
-        job.status = "COMPLETED"
+        if all(o["qa"].get("ok") for o in outputs):
+            job.status = "COMPLETED"
+        else:
+            job.status = "COMPLETED_WITH_WARNINGS"
         job.outputs = outputs
-        job.logs = f"Rendered {len(outputs)} outputs"
+        job.logs = f"Rendered {len(outputs)} outputs; QA complete"
+
+        notify_render_complete(db, project.id, job.id, outputs)
     except Exception as exc:
         job.status = "FAILED"
         job.logs = str(exc)
@@ -373,6 +389,58 @@ def analyze_project(project_id: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(job)
     return job
+
+
+@app.get("/projects/{project_id}/notifications", response_model=list[NotificationOut])
+def list_notifications(project_id: str, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return db.query(Notification).filter(Notification.project_id == project_id).order_by(Notification.created_at.desc()).all()
+
+
+@app.post("/projects/{project_id}/notifications", response_model=NotificationOut)
+def create_project_notification(
+    project_id: str,
+    payload: NotificationCreate,
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return create_notification(
+        db,
+        project_id=project_id,
+        job_id=None,
+        channel=payload.channel,
+        recipient=payload.recipient or config.SMTP_FROM,
+        subject=payload.subject,
+        body=payload.body,
+    )
+
+
+@app.post("/projects/{project_id}/package")
+def package_for_project(project_id: str, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        result = package_project(project.name, Path(project.workspace_path))
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/projects/{project_id}/deliver")
+def deliver_project(project_id: str, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        result = deliver_to_local_drive(project.name, Path(project.workspace_path))
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 def main():

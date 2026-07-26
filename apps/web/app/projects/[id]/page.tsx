@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { AnalysisResult, API_URL, Asset, Job, Project } from "@/lib/api";
+import { AnalysisResult, API_URL, Asset, Job, Notification, Project } from "@/lib/api";
 
 interface EditPlan {
   plan_version: string;
@@ -23,21 +23,25 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisResult[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [plan, setPlan] = useState<EditPlan | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const [delivery, setDelivery] = useState<Record<string, unknown> | null>(null);
 
   async function refresh() {
-    const [p, a, an] = await Promise.all([
+    const [p, a, an, n] = await Promise.all([
       fetch(`${API_URL}/projects/${id}`).then((r) => r.json()),
       fetch(`${API_URL}/projects/${id}/assets`).then((r) => r.json()),
       fetch(`${API_URL}/projects/${id}/analysis`).then((r) => r.json()).catch(() => []),
+      fetch(`${API_URL}/projects/${id}/notifications`).then((r) => r.json()).catch(() => []),
     ]);
     setProject(p);
     setAssets(a);
     setAnalysis(an);
+    setNotifications(n);
   }
 
   useEffect(() => {
@@ -94,6 +98,23 @@ export default function ProjectPage() {
     });
     const j = await res.json();
     setJob(j);
+    setLoading(null);
+    await refresh();
+  }
+
+  async function packageProject() {
+    setLoading("packaging");
+    const res = await fetch(`${API_URL}/projects/${id}/package`, { method: "POST" });
+    const d = await res.json();
+    setDelivery(d);
+    setLoading(null);
+  }
+
+  async function deliverProject() {
+    setLoading("delivering");
+    const res = await fetch(`${API_URL}/projects/${id}/deliver`, { method: "POST" });
+    const d = await res.json();
+    setDelivery(d);
     setLoading(null);
   }
 
@@ -198,17 +219,68 @@ export default function ProjectPage() {
           <div className="mt-4 rounded-lg bg-zinc-50 p-4 text-sm">
             <p><span className="font-medium">Status:</span> {job.status}</p>
             <p><span className="font-medium">Stage:</span> {job.stage}</p>
-            {job.outputs.map((o, i) => (
-              <div key={i} className="mt-2 border-t border-zinc-200 pt-2">
-                <p className="font-medium">{String(o.name || "")} · {String(o.resolution || "")} · {Number(o.duration || 0).toFixed(2)}s · {String(o.kind || "")}</p>
-                {o.thumbnail_path ? <p className="text-zinc-500">thumb: {String(o.thumbnail_path)}</p> : null}
-                {o.caption_path ? <p className="text-zinc-500">caption: {String(o.caption_path)}</p> : null}
-                <p className="break-all text-zinc-600">{String(o.path || "")}</p>
-              </div>
-            ))}
+            {job.outputs.map((o, i) => {
+              const qa = typeof o.qa === "object" && o.qa ? (o.qa as Record<string, unknown>) : null;
+              return (
+                <div key={i} className="mt-2 border-t border-zinc-200 pt-2">
+                  <p className="font-medium">
+                    {String(o.name || "")} · {String(o.resolution || "")} · {Number(o.duration || 0).toFixed(2)}s · {String(o.kind || "")}
+                  </p>
+                  {qa && (
+                    <p className="text-xs">
+                      QA: {String(qa.ok ? "passed" : "issues")} ·
+                      passed {(qa.passed as unknown[])?.length || 0} ·
+                      warnings {(qa.warnings as unknown[])?.length || 0} ·
+                      errors {(qa.errors as unknown[])?.length || 0}
+                    </p>
+                  )}
+                  {o.thumbnail_path ? <p className="text-zinc-500">thumb: {String(o.thumbnail_path)}</p> : null}
+                  {o.caption_path ? <p className="text-zinc-500">caption: {String(o.caption_path)}</p> : null}
+                  <p className="break-all text-zinc-600">{String(o.path || "")}</p>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
+
+      <section className="mt-6 rounded-xl border border-zinc-200 p-6">
+        <h2 className="mb-4 font-semibold">Delivery</h2>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={packageProject}
+            disabled={loading === "packaging"}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+          >
+            {loading === "packaging" ? "Packaging…" : "Package project"}
+          </button>
+          <button
+            onClick={deliverProject}
+            disabled={loading === "delivering"}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {loading === "delivering" ? "Delivering…" : "Deliver to local drive"}
+          </button>
+        </div>
+        {delivery && (
+          <pre className="mt-4 max-h-48 overflow-auto rounded bg-zinc-100 p-2 text-xs">
+            {JSON.stringify(delivery, null, 2)}
+          </pre>
+        )}
+      </section>
+
+      {notifications.length > 0 && (
+        <section className="mt-6 rounded-xl border border-zinc-200 p-6">
+          <h2 className="mb-4 font-semibold">Notifications</h2>
+          <ul className="space-y-2">
+            {notifications.map((n) => (
+              <li key={n.id} className="rounded-lg bg-zinc-50 px-3 py-2 text-sm">
+                {n.channel} · {n.status} · {n.subject}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }

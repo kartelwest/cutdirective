@@ -31,3 +31,13 @@ VOSK_MODEL_URL = os.getenv(
     "VOSK_MODEL_URL",
     "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
 )
+
+# Delivery / notifications
+DELIVERY_ROOT = Path(os.getenv("DELIVERY_ROOT", str(ROOT / "Deliveries"))).expanduser().resolve()
+DELIVERY_ROOT.mkdir(parents=True, exist_ok=True)
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("SMTP_FROM", "cutdirective@localhost")
+NOTIFICATION_CHANNELS = os.getenv("NOTIFICATION_CHANNELS", "in_app").split(",")

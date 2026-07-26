@@ -73,6 +73,20 @@ class AnalysisResult(Base):
     created_at = Column(DateTime, default=now_utc)
 
 
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=True)
+    channel = Column(String, default="in_app")
+    recipient = Column(String, nullable=True)
+    subject = Column(String, nullable=False)
+    body = Column(Text, default="")
+    status = Column(String, default="PENDING")
+    created_at = Column(DateTime, default=now_utc)
+
+
 class Preset(Base):
     __tablename__ = "presets"
 

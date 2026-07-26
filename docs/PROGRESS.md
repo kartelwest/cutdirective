@@ -59,8 +59,19 @@
 - [ ] Background worker render queue with real-time progress (planned)
 - [ ] Retry/restart from a failed stage (planned)
 
-## Gate 6+ — Next
-- [ ] Automated QA suite
-- [ ] SMTP/in-app notifications
-- [ ] Project packaging and delivery
-- [ ] Operator docs and real-project pilot
+## Gate 6 — QA, notifications, and delivery
+- [x] Automated QA per output (duration, resolution, codec, pixel format, bitrate, black/freeze frames, audio presence)
+- [x] `COMPLETED` vs `COMPLETED_WITH_WARNINGS` job status
+- [x] Pluggable notification adapter (`in_app` + SMTP when configured)
+- [x] In-app notification records and `/projects/{id}/notifications` endpoints
+- [x] Automatic notification on render completion
+- [x] Project packaging endpoint (`/projects/{id}/package`) creating `10_Archive` zip
+- [x] Local delivery endpoint (`/projects/{id}/deliver`) copying final exports to `DELIVERY_ROOT`
+- [x] UI for QA summary, packaging, delivery, and notification inbox
+
+## Gate 7+ — Next
+- [ ] Operator runbook and docs
+- [ ] Backup/restore procedures
+- [ ] Real-project pilot and feedback loop
+- [ ] Cloud LLM adapter for the AI Director
+- [ ] Source audio mixing/ducking and watermarked previews

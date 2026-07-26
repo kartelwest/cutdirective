@@ -99,6 +99,27 @@ class EditPlanOut(BaseModel):
     review_flags: List[str]
 
 
+class NotificationOut(BaseModel):
+    id: str
+    project_id: str
+    job_id: Optional[str]
+    channel: str
+    recipient: Optional[str]
+    subject: str
+    body: str
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class NotificationCreate(BaseModel):
+    channel: str = "in_app"
+    recipient: Optional[str] = None
+    subject: str
+    body: str = ""
+
+
 class HealthOut(BaseModel):
     status: str
     ffmpeg: bool
