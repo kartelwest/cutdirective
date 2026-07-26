@@ -7,9 +7,10 @@ __pypackages__/
 dist/
 build/
 
-# Workspaces
+# Workspaces / runtime data
 CutDirective/
 workspaces/
+data/
 *.local
 
 # Env
